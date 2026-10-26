@@ -218,4 +218,5 @@ npm run dev            # http://localhost:5173
 ### Documentation
 Add this section to the repository `README.md` so developers can instantly set up the frontend and understand the overall architecture.
 #   S u p e r m a r k e t - B l u e - P a n d a  
+ #   S u p e r m a r k e t - B l u e - P a n d a  
  
