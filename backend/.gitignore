@@ -1,0 +1,26 @@
+# Secrets: never commit
+.env
+**/secrets.json
+**/appsettings.Development.json
+**/appsettings.Production.json
+*.pfx
+*.key
+
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.rsuser
+TestResults/
+*.log
+
+# Database backups
+*.sql
+*.db
