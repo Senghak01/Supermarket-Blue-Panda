@@ -1,7 +1,9 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { jwtDecode } from 'jwt-decode';
 import { authApi } from '@/api';
-import type { User, DecodedToken, LoginRequest, RegisterRequest } from '@/types';
+import { TOKEN_KEY } from '@/api/client';
+import type { DecodedToken, LoginRequest, RegisterRequest, User } from '@/types';
+import { errorMessage } from '@/utils/errors';
 
 interface AuthState {
   token: string | null;
@@ -10,69 +12,66 @@ interface AuthState {
   error: string | null;
 }
 
-function decodeUser(token: string): User {
-  const decoded = jwtDecode<DecodedToken>(token);
-  const permissions = Array.isArray(decoded.permission)
-    ? decoded.permission
-    : decoded.permission
-      ? [decoded.permission]
-      : [];
+const NS = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/';
+const CLAIMS = {
+  id: [NS + 'nameidentifier', 'nameid', 'sub'],
+  email: [NS + 'emailaddress', 'email'],
+  name: [NS + 'name', 'unique_name', 'name'],
+  role: ['http://schemas.microsoft.com/ws/2008/06/identity/claims/role', 'role', 'roles'],
+  permission: ['permission'],
+};
+
+function claim(d: DecodedToken, keys: string[]): string[] {
+  for (const k of keys) {
+    const v = d[k];
+    if (v !== undefined && v !== null) return (Array.isArray(v) ? v : [v]).map(String);
+  }
+  return [];
+}
+
+export function decodeUser(token: string): User {
+  const d = jwtDecode<DecodedToken>(token);
+  const roles = claim(d, CLAIMS.role);
   return {
-    email: decoded.email,
-    name: decoded.name || decoded.email,
-    role: decoded.role || 'Customer',
-    permissions,
+    customerId: Number(claim(d, CLAIMS.id)[0] ?? 0),
+    email: claim(d, CLAIMS.email)[0] ?? '',
+    username: claim(d, CLAIMS.name)[0] ?? '',
+    roles: roles.length ? roles : ['Customer'],
+    permissions: claim(d, CLAIMS.permission),
   };
 }
 
-// Restore from localStorage on load
-const savedToken = localStorage.getItem('jwt');
-let savedUser: User | null = null;
-if (savedToken) {
+// Restore the session on page load, but only if the token has not expired
+function restore(): { token: string | null; user: User | null } {
+  const saved = localStorage.getItem(TOKEN_KEY);
+  if (!saved) return { token: null, user: null };
   try {
-    const decoded = jwtDecode<DecodedToken>(savedToken);
-    if (decoded.exp * 1000 > Date.now()) {
-      savedUser = decodeUser(savedToken);
-    } else {
-      localStorage.removeItem('jwt');
-    }
+    const { exp } = jwtDecode<DecodedToken>(saved);
+    if (exp * 1000 > Date.now()) return { token: saved, user: decodeUser(saved) };
   } catch {
-    localStorage.removeItem('jwt');
+    /* fall through */
   }
+  localStorage.removeItem(TOKEN_KEY);
+  return { token: null, user: null };
 }
 
-const initialState: AuthState = {
-  token: savedUser ? savedToken : null,
-  user: savedUser,
-  status: 'idle',
-  error: null,
-};
+const initialState: AuthState = { ...restore(), status: 'idle', error: null };
 
-export const loginThunk = createAsyncThunk(
-  'auth/login',
-  async (credentials: LoginRequest, { rejectWithValue }) => {
-    try {
-      const { data } = await authApi.login(credentials);
-      return data;
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } };
-      return rejectWithValue(error.response?.data?.message || 'Login failed');
-    }
-  },
-);
+export const loginThunk = createAsyncThunk('auth/login', async (body: LoginRequest, { rejectWithValue }) => {
+  try {
+    return (await authApi.login(body)).data;
+  } catch (err) {
+    return rejectWithValue(errorMessage(err, 'Login failed'));
+  }
+});
 
-export const registerThunk = createAsyncThunk(
-  'auth/register',
-  async (payload: RegisterRequest, { rejectWithValue }) => {
-    try {
-      const { data } = await authApi.register(payload);
-      return data;
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } };
-      return rejectWithValue(error.response?.data?.message || 'Registration failed');
-    }
-  },
-);
+export const registerThunk = createAsyncThunk('auth/register', async (body: RegisterRequest, { rejectWithValue }) => {
+  try {
+    return (await authApi.register(body)).data;
+  } catch (err) {
+    return rejectWithValue(errorMessage(err, 'Registration failed'));
+  }
+});
 
 const authSlice = createSlice({
   name: 'auth',
@@ -82,49 +81,35 @@ const authSlice = createSlice({
       state.token = null;
       state.user = null;
       state.error = null;
-      localStorage.removeItem('jwt');
+      localStorage.removeItem(TOKEN_KEY);
     },
     clearError(state) {
       state.error = null;
     },
+    setUsername(state, action: { payload: string }) {
+      if (state.user) state.user.username = action.payload;
+    },
   },
   extraReducers: (builder) => {
-    // Login
-    builder
-      .addCase(loginThunk.pending, (state) => {
-        state.status = 'loading';
-        state.error = null;
-      })
-      .addCase(loginThunk.fulfilled, (state, { payload }) => {
-        state.status = 'idle';
-        state.token = payload.token;
-        state.user = decodeUser(payload.token);
-        localStorage.setItem('jwt', payload.token);
-      })
-      .addCase(loginThunk.rejected, (state, { payload }) => {
-        state.status = 'failed';
-        state.error = payload as string;
-      });
-
-    // Register
-    builder
-      .addCase(registerThunk.pending, (state) => {
-        state.status = 'loading';
-        state.error = null;
-      })
-      .addCase(registerThunk.fulfilled, (state, { payload }) => {
-        state.status = 'idle';
-        state.token = payload.token;
-        state.user = decodeUser(payload.token);
-        localStorage.setItem('jwt', payload.token);
-      })
-      .addCase(registerThunk.rejected, (state, { payload }) => {
-        state.status = 'failed';
-        state.error = payload as string;
-      });
+    for (const thunk of [loginThunk, registerThunk]) {
+      builder
+        .addCase(thunk.pending, (state) => {
+          state.status = 'loading';
+          state.error = null;
+        })
+        .addCase(thunk.fulfilled, (state, { payload }) => {
+          state.status = 'idle';
+          state.token = payload.token;
+          state.user = decodeUser(payload.token);
+          localStorage.setItem(TOKEN_KEY, payload.token);
+        })
+        .addCase(thunk.rejected, (state, { payload }) => {
+          state.status = 'failed';
+          state.error = (payload as string) ?? 'Something went wrong';
+        });
+    }
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { logout, clearError, setUsername } = authSlice.actions;
 export default authSlice.reducer;
-

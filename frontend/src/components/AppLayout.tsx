@@ -1,18 +1,11 @@
-import { Layout, Menu, Badge, Dropdown, Button, Space, theme } from 'antd';
-import {
-  ShoppingCartOutlined,
-  UserOutlined,
-  LoginOutlined,
-  LogoutOutlined,
-  DashboardOutlined,
-  ShopOutlined,
-  AppstoreOutlined,
-  HistoryOutlined,
-} from '@ant-design/icons';
-import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Avatar, Badge, Button, Dropdown, Input, Layout, Menu } from 'antd';
+import { LoginOutlined, LogoutOutlined, ShoppingCartOutlined, UserOutlined } from '@ant-design/icons';
+import { useEffect } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { logout } from '@/store/authSlice';
+import { fetchCart } from '@/store/cartSlice';
 
 const { Header, Content, Footer } = Layout;
 
@@ -20,90 +13,77 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const { isAuthenticated, user, isAdmin, isStaff, hasPermission } = useAuth();
-  const cartCount = useAppSelector((s) => s.cart.items.reduce((sum, i) => sum + i.quantity, 0));
-  const { token: { colorBgContainer } } = theme.useToken();
+  const { isAuthenticated, user, isAdmin, canViewInventory } = useAuth();
+  const itemCount = useAppSelector((s) => s.cart.cart?.itemCount ?? 0);
 
-  // Build nav items
-  const menuItems = [
-    { key: '/', label: 'Home', icon: <ShopOutlined /> },
-    { key: '/catalog', label: 'Catalog', icon: <AppstoreOutlined /> },
+  // Load the customer's server-side cart as soon as they are signed in
+  useEffect(() => {
+    if (isAuthenticated) void dispatch(fetchCart());
+  }, [isAuthenticated, dispatch]);
+
+  const navItems = [
+    { key: '/catalog', label: 'Shop' },
+    ...(isAuthenticated ? [{ key: '/orders', label: 'My orders' }] : []),
+    ...(canViewInventory ? [{ key: '/staff/inventory', label: 'Inventory' }] : []),
+    ...(isAdmin ? [{ key: '/admin', label: 'Admin' }] : []),
   ];
-
-  if (isAuthenticated) {
-    menuItems.push({ key: '/orders', label: 'My Orders', icon: <HistoryOutlined /> });
-  }
-
-  if (isAdmin) {
-    menuItems.push({ key: '/admin', label: 'Admin', icon: <DashboardOutlined /> });
-  }
-
-  if ((isStaff || isAdmin) && hasPermission('ManageStock')) {
-    menuItems.push({ key: '/staff/inventory', label: 'Inventory', icon: <AppstoreOutlined /> });
-  }
-
-  const handleLogout = () => {
-    dispatch(logout());
-    navigate('/');
-  };
-
-  const userMenu = {
-    items: [
-      { key: 'profile', label: `${user?.name} (${user?.role})`, disabled: true },
-      { key: 'orders', label: 'My Orders', onClick: () => navigate('/orders') },
-      { type: 'divider' as const },
-      { key: 'logout', label: 'Logout', icon: <LogoutOutlined />, onClick: handleLogout },
-    ],
-  };
+  const selected = navItems.find((i) => location.pathname.startsWith(i.key))?.key;
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', padding: '0 24px' }}>
-        <div
-          style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginRight: 40, cursor: 'pointer' }}
-          onClick={() => navigate('/')}
-        >
-          🛒 Supermarket
+    <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
+      <Header style={{ background: '#fff', borderBottom: '1px solid var(--line)', padding: '0 16px', height: 'auto', lineHeight: 1 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap' }}>
+          <Link to="/" className="display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--leaf)' }}>
+            Supermarket
+          </Link>
+          <Input.Search
+            placeholder="Search groceries"
+            allowClear
+            style={{ flex: '1 1 220px', maxWidth: 440 }}
+            onSearch={(q) => navigate(q ? `/catalog?search=${encodeURIComponent(q)}` : '/catalog')}
+          />
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Badge count={itemCount} size="small" color="#d8452e">
+              <Button type="text" shape="circle" aria-label="Cart" icon={<ShoppingCartOutlined style={{ fontSize: 20 }} />} onClick={() => navigate('/cart')} />
+            </Badge>
+            {isAuthenticated ? (
+              <Dropdown
+                menu={{
+                  items: [
+                    { key: 'who', label: `${user?.username} (${user?.roles.join(', ')})`, disabled: true },
+                    { key: 'account', label: 'Account and addresses', onClick: () => navigate('/account') },
+                    { key: 'orders', label: 'My orders', onClick: () => navigate('/orders') },
+                    { type: 'divider' },
+                    {
+                      key: 'logout',
+                      label: 'Log out',
+                      icon: <LogoutOutlined />,
+                      onClick: () => {
+                        dispatch(logout());
+                        navigate('/');
+                      },
+                    },
+                  ],
+                }}
+                trigger={['click']}
+              >
+                <Avatar style={{ background: 'var(--leaf)', cursor: 'pointer' }} icon={<UserOutlined />} aria-label="Account menu" />
+              </Dropdown>
+            ) : (
+              <Button type="primary" icon={<LoginOutlined />} onClick={() => navigate('/login')}>
+                Log in
+              </Button>
+            )}
+          </div>
         </div>
-
-        <Menu
-          theme="dark"
-          mode="horizontal"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-
-        <Space size="middle">
-          <Badge count={cartCount} size="small">
-            <Button
-              type="text"
-              icon={<ShoppingCartOutlined style={{ fontSize: 20, color: '#fff' }} />}
-              onClick={() => navigate('/cart')}
-            />
-          </Badge>
-
-          {isAuthenticated ? (
-            <Dropdown menu={userMenu} placement="bottomRight">
-              <Button type="text" icon={<UserOutlined style={{ color: '#fff' }} />} />
-            </Dropdown>
-          ) : (
-            <Button type="primary" icon={<LoginOutlined />} onClick={() => navigate('/login')}>
-              Login
-            </Button>
-          )}
-        </Space>
+        <Menu mode="horizontal" selectedKeys={selected ? [selected] : []} items={navItems} onClick={({ key }) => navigate(key)} style={{ maxWidth: 1200, margin: '0 auto', borderBottom: 0, lineHeight: '40px' }} />
       </Header>
-
-      <Content style={{ padding: '24px 48px', background: colorBgContainer }}>
+      <Content>
         <Outlet />
       </Content>
-
-      <Footer style={{ textAlign: 'center' }}>
-        Supermarket System ©{new Date().getFullYear()}
+      <Footer style={{ textAlign: 'center', background: 'transparent' }} className="muted">
+        Fresh groceries, delivered. Pay with Bakong KHQR or cash on delivery.
       </Footer>
     </Layout>
   );
 }
-

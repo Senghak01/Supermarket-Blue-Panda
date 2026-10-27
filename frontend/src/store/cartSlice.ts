@@ -1,60 +1,66 @@
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { CartItem, Product } from '@/types';
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { cartApi } from '@/api';
+import type { CartResponse } from '@/types';
+import { errorMessage } from '@/utils/errors';
+import { logout } from './authSlice';
 
 interface CartState {
-  items: CartItem[];
+  cart: CartResponse | null;
+  busy: boolean;
 }
 
-// Persist cart in localStorage
-function loadCart(): CartItem[] {
+const wrap = <A>(fn: (arg: A) => Promise<{ data: CartResponse }>) => async (arg: A, { rejectWithValue }: { rejectWithValue: (v: string) => unknown }) => {
   try {
-    const raw = localStorage.getItem('cart');
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+    return (await fn(arg)).data;
+  } catch (err) {
+    return rejectWithValue(errorMessage(err)) as never;
   }
-}
-
-function saveCart(items: CartItem[]) {
-  localStorage.setItem('cart', JSON.stringify(items));
-}
-
-const initialState: CartState = {
-  items: loadCart(),
 };
+
+// The cart lives on the server (stock is checked there), so every change returns the fresh cart.
+export const fetchCart = createAsyncThunk('cart/fetch', wrap<void>(() => cartApi.get()));
+export const addToCart = createAsyncThunk('cart/add', wrap((a: { productId: number; quantity?: number }) => cartApi.add(a)));
+export const updateCartItem = createAsyncThunk(
+  'cart/update',
+  wrap((a: { cartItemId: number; quantity: number }) => cartApi.update(a.cartItemId, a.quantity)),
+);
+export const removeCartItem = createAsyncThunk('cart/remove', wrap((cartItemId: number) => cartApi.remove(cartItemId)));
+export const clearCart = createAsyncThunk('cart/clear', async (_: void, { rejectWithValue }) => {
+  try {
+    await cartApi.clear();
+    return { items: [], itemCount: 0, subtotal: 0, hasIssues: false } as CartResponse;
+  } catch (err) {
+    return rejectWithValue(errorMessage(err));
+  }
+});
 
 const cartSlice = createSlice({
   name: 'cart',
-  initialState,
+  initialState: { cart: null, busy: false } as CartState,
   reducers: {
-    addToCart(state, action: PayloadAction<{ product: Product; quantity?: number }>) {
-      const { product, quantity = 1 } = action.payload;
-      const existing = state.items.find((i) => i.product.id === product.id);
-      if (existing) {
-        existing.quantity += quantity;
-      } else {
-        state.items.push({ product, quantity });
-      }
-      saveCart(state.items);
+    resetCart(state) {
+      state.cart = null;
     },
-    removeFromCart(state, action: PayloadAction<number>) {
-      state.items = state.items.filter((i) => i.product.id !== action.payload);
-      saveCart(state.items);
-    },
-    updateQuantity(state, action: PayloadAction<{ productId: number; quantity: number }>) {
-      const item = state.items.find((i) => i.product.id === action.payload.productId);
-      if (item) {
-        item.quantity = Math.max(1, action.payload.quantity);
-      }
-      saveCart(state.items);
-    },
-    clearCart(state) {
-      state.items = [];
-      saveCart(state.items);
-    },
+  },
+  extraReducers: (builder) => {
+    for (const t of [fetchCart, addToCart, updateCartItem, removeCartItem, clearCart]) {
+      builder
+        .addCase(t.pending, (s) => {
+          s.busy = true;
+        })
+        .addCase(t.fulfilled, (s, { payload }) => {
+          s.busy = false;
+          s.cart = payload as CartResponse;
+        })
+        .addCase(t.rejected, (s) => {
+          s.busy = false;
+        });
+    }
+    builder.addCase(logout, (s) => {
+      s.cart = null;
+    });
   },
 });
 
-export const { addToCart, removeFromCart, updateQuantity, clearCart } = cartSlice.actions;
+export const { resetCart } = cartSlice.actions;
 export default cartSlice.reducer;
-

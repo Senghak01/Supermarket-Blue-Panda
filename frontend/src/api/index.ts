@@ -1,12 +1,11 @@
 export { default as api } from './client';
 export { authApi } from './auth';
-export { catalogApi } from './catalog';
-export { orderApi } from './orders';
-export { inventoryApi } from './inventory';
+export { catalogApi, cartApi, addressApi, orderApi, paymentApi } from './shop';
 export {
+  inventoryApi,
+  staffProductApi,
   adminUserApi,
   adminProductApi,
   adminCategoryApi,
   adminOrderApi,
-} from './admin';
-
+} from './staff';

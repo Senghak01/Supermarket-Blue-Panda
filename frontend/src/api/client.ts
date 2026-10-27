@@ -1,28 +1,29 @@
 import axios from 'axios';
 
+export const TOKEN_KEY = 'jwt';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5080/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach JWT to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jwt');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Global error handling
 api.interceptors.response.use(
-  (response) => response,
+  (r) => r,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('jwt');
-      // Only redirect if not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+    // An expired or invalid token on a protected call: sign out and go to login.
+    // (A 401 from the login form itself is just "wrong password", so leave it alone.)
+    const url: string = error.config?.url ?? '';
+    const isAuthForm = url.includes('/auth/login') || url.includes('/auth/register');
+    if (error.response?.status === 401 && !isAuthForm && localStorage.getItem(TOKEN_KEY)) {
+      localStorage.removeItem(TOKEN_KEY);
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = `/login?expired=1`;
       }
     }
     return Promise.reject(error);
@@ -30,4 +31,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

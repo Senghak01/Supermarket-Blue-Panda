@@ -1,81 +1,67 @@
-import { Card, Button, Typography, InputNumber, message } from 'antd';
+import { Button, Card, InputNumber, Tag, Typography, message } from 'antd';
 import { ShoppingCartOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { useAppDispatch } from '@/store/hooks';
 import { addToCart } from '@/store/cartSlice';
-import type { Product } from '@/types';
-import { useState } from 'react';
+import type { ProductListItem } from '@/types';
+import { money } from '@/utils/format';
 
-const { Meta } = Card;
-const { Text } = Typography;
-
-interface Props {
-  product: Product;
-}
-
-export default function ProductCard({ product }: Props) {
+export default function ProductCard({ product }: { product: ProductListItem }) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const [qty, setQty] = useState(1);
+  const [adding, setAdding] = useState(false);
 
-  const handleAdd = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!product.inStock) return;
-    dispatch(addToCart({ product, quantity: qty }));
-    message.success(`${product.name} added to cart`);
-    setQty(1);
+  const add = async () => {
+    if (!isAuthenticated) {
+      message.info('Log in to start your cart.');
+      navigate('/login', { state: { from: location.pathname + location.search } });
+      return;
+    }
+    setAdding(true);
+    const result = await dispatch(addToCart({ productId: product.productId, quantity: qty }));
+    setAdding(false);
+    if (addToCart.fulfilled.match(result)) message.success(`${product.name} added to your cart`);
+    else message.error((result.payload as string) ?? 'Could not add this item');
   };
 
   return (
     <Card
       hoverable
-      style={{ width: '100%' }}
+      styles={{ body: { padding: 12 } }}
       cover={
         product.imageUrl ? (
-          <img alt={product.name} src={product.imageUrl} style={{ height: 200, objectFit: 'cover' }} />
+          <img src={product.imageUrl} alt={product.name} style={{ height: 140, objectFit: 'cover' }} loading="lazy" />
         ) : (
-          <div style={{ height: 200, background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48 }}>
-            🛍️
+          <div
+            aria-hidden
+            style={{ height: 140, display: 'grid', placeItems: 'center', background: '#e4eee3', color: '#1f6f43', fontSize: 40 }}
+            className="display"
+          >
+            {product.name.charAt(0)}
           </div>
         )
       }
-      onClick={() => navigate(`/products/${product.id}`)}
-      actions={[
-        <InputNumber
-          key="qty"
-          min={1}
-          max={product.stockQuantity}
-          value={qty}
-          onChange={(v) => setQty(v || 1)}
-          onClick={(e) => e.stopPropagation()}
-          size="small"
-          style={{ width: 60 }}
-        />,
-        <Button
-          key="add"
-          type="primary"
-          icon={<ShoppingCartOutlined />}
-          disabled={!product.inStock}
-          onClick={handleAdd}
-          size="small"
-        >
-          Add
-        </Button>,
-      ]}
+      onClick={() => navigate(`/products/${product.productId}`)}
     >
-      <Meta
-        title={product.name}
-        description={
-          <>
-            <Text strong style={{ fontSize: 16 }}>${product.price.toFixed(2)}</Text>
-            <br />
-            <Text type={product.inStock ? 'success' : 'danger'}>
-              {product.inStock ? `In Stock (${product.stockQuantity})` : 'Out of Stock'}
-            </Text>
-          </>
-        }
-      />
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{product.categoryName}</Typography.Text>
+      <Typography.Title level={5} style={{ margin: '2px 0 4px' }} ellipsis={{ rows: 2 }}>
+        {product.name}
+      </Typography.Title>
+      <div className="row-between" style={{ marginBottom: 10 }}>
+        <span className="price">{money(product.price)} <span className="muted" style={{ fontWeight: 400 }}>/ {product.unit}</span></span>
+        {!product.inStock && <Tag color="red">Sold out</Tag>}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+        <InputNumber min={1} max={99} value={qty} onChange={(v) => setQty(v ?? 1)} size="small" style={{ width: 62 }} disabled={!product.inStock} aria-label="Quantity" />
+        <Button type="primary" block icon={<ShoppingCartOutlined />} loading={adding} disabled={!product.inStock} onClick={add}>
+          Add
+        </Button>
+      </div>
     </Card>
   );
 }
-

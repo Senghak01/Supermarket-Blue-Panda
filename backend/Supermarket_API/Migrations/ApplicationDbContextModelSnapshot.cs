@@ -228,6 +228,45 @@ namespace Supermarket_API.Migrations
                     b.ToTable("CustomerAddresses");
                 });
 
+            modelBuilder.Entity("Supermarket.API.Models.CustomerPermission", b =>
+                {
+                    b.Property<int>("CustomerPermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("CustomerPermissionId"));
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("CustomerPermissionId");
+
+                    b.HasIndex("CustomerId", "Permission")
+                        .IsUnique();
+
+                    b.ToTable("CustomerPermissions");
+                });
+
+            modelBuilder.Entity("Supermarket.API.Models.CustomerRole", b =>
+                {
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("CustomerId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("CustomerRoles");
+                });
+
             modelBuilder.Entity("Supermarket.API.Models.Inventory", b =>
                 {
                     b.Property<int>("InventoryId")
@@ -440,6 +479,27 @@ namespace Supermarket_API.Migrations
                     b.ToTable("Products");
                 });
 
+            modelBuilder.Entity("Supermarket.API.Models.Role", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RoleId"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("RoleId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Roles");
+                });
+
             modelBuilder.Entity("Supermarket.API.Models.StockMovement", b =>
                 {
                     b.Property<int>("StockMovementId")
@@ -516,6 +576,36 @@ namespace Supermarket_API.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Supermarket.API.Models.CustomerPermission", b =>
+                {
+                    b.HasOne("Supermarket.API.Models.Customer", "Customer")
+                        .WithMany("CustomerPermissions")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Supermarket.API.Models.CustomerRole", b =>
+                {
+                    b.HasOne("Supermarket.API.Models.Customer", "Customer")
+                        .WithMany("CustomerRoles")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Supermarket.API.Models.Role", "Role")
+                        .WithMany("CustomerRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Supermarket.API.Models.Inventory", b =>
@@ -605,6 +695,10 @@ namespace Supermarket_API.Migrations
                     b.Navigation("Addresses");
 
                     b.Navigation("Cart");
+
+                    b.Navigation("CustomerPermissions");
+
+                    b.Navigation("CustomerRoles");
                 });
 
             modelBuilder.Entity("Supermarket.API.Models.Order", b =>
@@ -615,6 +709,11 @@ namespace Supermarket_API.Migrations
             modelBuilder.Entity("Supermarket.API.Models.Product", b =>
                 {
                     b.Navigation("Inventory");
+                });
+
+            modelBuilder.Entity("Supermarket.API.Models.Role", b =>
+                {
+                    b.Navigation("CustomerRoles");
                 });
 #pragma warning restore 612, 618
         }

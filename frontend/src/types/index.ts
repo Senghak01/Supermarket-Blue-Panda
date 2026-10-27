@@ -26,22 +26,15 @@ export interface AuthResponse {
   customer: CustomerResponse;
 }
 
-export interface DecodedToken {
-  nameid: string;        // ClaimTypes.NameIdentifier → customerId
-  email: string;
-  unique_name: string;   // ClaimTypes.Name → username
-  role: string | string[];
-  permission?: string | string[];
-  exp: number;
-  iss: string;
-  aud: string;
-}
+// The API signs claims with their long .NET names; short names are accepted too,
+// so decoding keeps working if the backend later switches to short names.
+export type DecodedToken = Record<string, string | string[] | number | undefined> & { exp: number };
 
 export interface User {
   customerId: number;
   email: string;
   username: string;
-  role: string;
+  roles: string[];
   permissions: string[];
 }
 
