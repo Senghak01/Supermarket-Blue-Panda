@@ -11,6 +11,10 @@ public interface IAdminUserService
     Task<AdminUserListItem> UpdateUserRolesAsync(int customerId, UpdateUserRolesRequest request);
     Task<AdminUserListItem> GrantPermissionAsync(int customerId, string permission);
     Task<AdminUserListItem> RevokePermissionAsync(int customerId, string permission);
+    Task<AdminUserListItem> UpdateUserPermissionsAsync(int customerId, UpdateUserPermissionsRequest request);
     Task<AdminUserListItem> SetUserStatusAsync(int customerId, bool isActive);
+    Task<AdminUserListItem> UpdateEmployeeInfoAsync(int customerId, UpdateEmployeeInfoRequest request);
+    Task<List<RoleResponse>> GetRolesAsync();
+    Task<RoleResponse> CreateRoleAsync(CreateRoleRequest request);
 }
 

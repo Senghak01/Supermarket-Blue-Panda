@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Supermarket.API.Data;
 using Supermarket.API.DTOs.Auth;
 using Supermarket.API.DTOs.Profile;
@@ -15,11 +16,13 @@ public class AuthService : IAuthService
 
     private readonly ApplicationDbContext _db;
     private readonly ITokenService _tokens;
+    private readonly IHostEnvironment? _env;
 
-    public AuthService(ApplicationDbContext db, ITokenService tokens)
+    public AuthService(ApplicationDbContext db, ITokenService tokens, IHostEnvironment? env = null)
     {
         _db = db;
         _tokens = tokens;
+        _env = env;
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -93,6 +96,101 @@ public class AuthService : IAuthService
     {
         var (token, expiresAt) = _tokens.CreateToken(customer);
         return new AuthResponse { Token = token, ExpiresAt = expiresAt, Customer = ToResponse(customer) };
+    }
+
+    public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Email == email && c.IsActive);
+
+        // If user not found, in development be explicit so developers/testers know immediately
+        if (customer == null)
+        {
+            if (_env?.IsDevelopment() == true)
+            {
+                throw AppException.NotFound($"Email '{email}' is not registered as a customer. Please check the spelling or sign up first.");
+            }
+
+            return new ForgotPasswordResponse
+            {
+                Message = "If this email is registered, password reset instructions have been sent."
+            };
+        }
+
+        // Invalidate previous active tokens for this email
+        var previousTokens = await _db.PasswordResetTokens
+            .Where(t => t.Email == email && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync();
+        foreach (var prev in previousTokens)
+        {
+            prev.IsUsed = true;
+        }
+
+        var token = Guid.NewGuid().ToString("N");
+        var code = Random.Shared.Next(100000, 999999).ToString();
+
+        var resetToken = new PasswordResetToken
+        {
+            Email = email,
+            Token = token,
+            Code = code,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.PasswordResetTokens.Add(resetToken);
+        await _db.SaveChangesAsync();
+
+        var response = new ForgotPasswordResponse
+        {
+            Message = "If this email is registered, password reset instructions have been sent."
+        };
+
+        // In development, expose the code/token to allow easy local testing
+        if (_env?.IsDevelopment() == true)
+        {
+            response.ResetToken = token;
+            response.ResetCode = code;
+        }
+
+        return response;
+    }
+
+    public async Task<bool> VerifyResetCodeAsync(VerifyResetCodeRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var code = request.Code.Trim();
+
+        var tokenRecord = await _db.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.Email == email && t.Code == code && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow);
+
+        if (tokenRecord == null)
+            throw AppException.BadRequest("Invalid or expired verification code.");
+
+        return true;
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var tokenOrCode = request.TokenOrCode.Trim();
+
+        var tokenRecord = await _db.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.Email == email && (t.Token == tokenOrCode || t.Code == tokenOrCode) && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow);
+
+        if (tokenRecord == null)
+            throw AppException.BadRequest("Invalid or expired password reset token or code.");
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Email == email);
+        if (customer == null)
+            throw AppException.NotFound("User account not found.");
+
+        customer.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        customer.UpdatedAt = DateTime.UtcNow;
+        tokenRecord.IsUsed = true;
+
+        await _db.SaveChangesAsync();
     }
 
     private static CustomerResponse ToResponse(Customer c) => new()

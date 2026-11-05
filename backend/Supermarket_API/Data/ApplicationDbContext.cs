@@ -21,6 +21,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<CustomerRole> CustomerRoles => Set<CustomerRole>();
     public DbSet<CustomerPermission> CustomerPermissions => Set<CustomerPermission>();
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -88,6 +90,36 @@ public class ApplicationDbContext : DbContext
              .HasForeignKey(x => x.CustomerId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.CustomerId, x.Permission }).IsUnique();
+        });
+
+        b.Entity<Employee>(e =>
+        {
+            e.HasKey(x => x.EmployeeId);
+            e.Property(x => x.FirstName).IsRequired().HasMaxLength(50);
+            e.Property(x => x.LastName).IsRequired().HasMaxLength(50);
+            e.Property(x => x.PhoneNumber).HasMaxLength(30);
+            e.Property(x => x.Position).HasMaxLength(100);
+            e.Property(x => x.Department).HasMaxLength(100);
+            e.Property(x => x.EmergencyContact).HasMaxLength(100);
+            e.Property(x => x.Salary).HasPrecision(18, 2);
+
+            e.HasOne(x => x.Customer)
+             .WithOne(c => c.Employee)
+             .HasForeignKey<Employee>(x => x.CustomerId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.CustomerId).IsUnique();
+        });
+
+        b.Entity<PasswordResetToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Email).IsRequired().HasMaxLength(255);
+            e.Property(x => x.Token).IsRequired().HasMaxLength(128);
+            e.Property(x => x.Code).IsRequired().HasMaxLength(10);
+            e.HasIndex(x => x.Email);
+            e.HasIndex(x => x.Token);
+            e.HasIndex(x => x.Code);
         });
 
         // Cart, Catalog and Order configurations live in Data/Configurations

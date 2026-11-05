@@ -54,10 +54,30 @@ builder.Services
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("Admin", "Staff"));
+    options.AddPolicy("StaffOrAdmin", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.IsInRole("Admin") ||
+            ctx.User.IsInRole("Staff") ||
+            ctx.User.IsInRole("StockController") ||
+            ctx.User.HasClaim("permission", "ManageStock") ||
+            ctx.User.HasClaim("permission", "ManageProducts") ||
+            ctx.User.HasClaim("permission", "ManageCategories")));
+
     options.AddPolicy("ManageStock", policy =>
         policy.RequireAssertion(ctx =>
-            ctx.User.IsInRole("Admin") || ctx.User.HasClaim("permission", "ManageStock")));
+            ctx.User.IsInRole("Admin") ||
+            ctx.User.IsInRole("StockController") ||
+            ctx.User.HasClaim("permission", "ManageStock")));
+
+    options.AddPolicy("ManageProducts", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.IsInRole("Admin") ||
+            ctx.User.HasClaim("permission", "ManageProducts")));
+
+    options.AddPolicy("ManageCategories", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.IsInRole("Admin") ||
+            ctx.User.HasClaim("permission", "ManageCategories")));
 });
 
 // ---- Rate limiting: slows down password guessing on register / login ----
@@ -152,6 +172,26 @@ if (builder.Environment.IsDevelopment())
 builder.Services.AddHostedService<UnpaidOrderExpiryService>();
 
 builder.Services.AddControllers();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowWebClient", policy =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(_ => true)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+        else
+        {
+            policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "http://127.0.0.1:5173")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+    });
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -195,24 +235,26 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    // Development only: sample categories/products (run Update-Database first)
+    // Development only: automatically apply migrations and seed sample categories/products
     try
     {
         using var scope = app.Services.CreateScope();
-        await DevSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.MigrateAsync();
+        await DevSeeder.SeedAsync(db);
     }
     catch (Exception ex)
     {
-        app.Logger.LogWarning(ex, "Skipped the sample data because the database is not ready. Run Update-Database and start the app again.");
+        app.Logger.LogWarning(ex, "Could not run database migrations or seeding. Ensure MySQL is running and connection string is valid.");
     }
 }
 else
 {
     app.UseHsts(); // tell browsers to always use HTTPS
+    app.UseHttpsRedirection();
 }
-
-app.UseHttpsRedirection();
 app.UseRateLimiter();
+app.UseCors("AllowWebClient");
 app.UseAuthentication();   // must come before UseAuthorization
 app.UseAuthorization();
 app.MapControllers();

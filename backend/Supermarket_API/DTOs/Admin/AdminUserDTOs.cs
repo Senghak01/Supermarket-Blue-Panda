@@ -11,6 +11,45 @@ public class AdminUserListItem
     public DateTime CreatedAt { get; set; }
     public List<string> Roles { get; set; } = new();
     public List<string> Permissions { get; set; } = new();
+    public EmployeeInfoDTO? Employee { get; set; }
+}
+
+public class EmployeeInfoDTO
+{
+    public int EmployeeId { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string? Position { get; set; }
+    public string? Department { get; set; }
+    public DateTime? HireDate { get; set; }
+    public decimal? Salary { get; set; }
+    public string? EmergencyContact { get; set; }
+}
+
+public class UpdateEmployeeInfoRequest
+{
+    [Required, StringLength(50)]
+    public string FirstName { get; set; } = string.Empty;
+
+    [Required, StringLength(50)]
+    public string LastName { get; set; } = string.Empty;
+
+    [StringLength(30)]
+    public string? PhoneNumber { get; set; }
+
+    [StringLength(100)]
+    public string? Position { get; set; }
+
+    [StringLength(100)]
+    public string? Department { get; set; }
+
+    public DateTime? HireDate { get; set; }
+
+    public decimal? Salary { get; set; }
+
+    [StringLength(100)]
+    public string? EmergencyContact { get; set; }
 }
 
 public class CreateStaffUserRequest
@@ -33,6 +72,16 @@ public class CreateStaffUserRequest
     /// Optional initial permissions (e.g. "ManageStock")
     /// </summary>
     public List<string>? Permissions { get; set; }
+
+    // Optional Employee HR profile
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Position { get; set; }
+    public string? Department { get; set; }
+    public DateTime? HireDate { get; set; }
+    public decimal? Salary { get; set; }
+    public string? EmergencyContact { get; set; }
 }
 
 public class UpdateUserRolesRequest
@@ -50,5 +99,23 @@ public class GrantPermissionRequest
 public class UpdateUserStatusRequest
 {
     public bool IsActive { get; set; }
+}
+
+public class RoleResponse
+{
+    public int RoleId { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class CreateRoleRequest
+{
+    [Required, StringLength(50, MinimumLength = 2)]
+    public string Name { get; set; } = string.Empty;
+}
+
+public class UpdateUserPermissionsRequest
+{
+    [Required]
+    public List<string> Permissions { get; set; } = new();
 }
 

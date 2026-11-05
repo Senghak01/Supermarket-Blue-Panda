@@ -41,10 +41,29 @@ public class AdminUsersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.CustomerId }, created);
     }
 
+    [HttpGet("roles")]
+    public async Task<ActionResult<List<RoleResponse>>> GetRoles()
+    {
+        return Ok(await _adminUsers.GetRolesAsync());
+    }
+
+    [HttpPost("roles")]
+    public async Task<ActionResult<RoleResponse>> CreateRole([FromBody] CreateRoleRequest request)
+    {
+        var role = await _adminUsers.CreateRoleAsync(request);
+        return Ok(role);
+    }
+
     [HttpPut("{id:int}/roles")]
     public async Task<ActionResult<AdminUserListItem>> UpdateRoles(int id, [FromBody] UpdateUserRolesRequest request)
     {
         return Ok(await _adminUsers.UpdateUserRolesAsync(id, request));
+    }
+
+    [HttpPut("{id:int}/permissions")]
+    public async Task<ActionResult<AdminUserListItem>> UpdatePermissions(int id, [FromBody] UpdateUserPermissionsRequest request)
+    {
+        return Ok(await _adminUsers.UpdateUserPermissionsAsync(id, request));
     }
 
     [HttpPost("{id:int}/permissions")]
@@ -63,6 +82,12 @@ public class AdminUsersController : ControllerBase
     public async Task<ActionResult<AdminUserListItem>> SetStatus(int id, [FromBody] UpdateUserStatusRequest request)
     {
         return Ok(await _adminUsers.SetUserStatusAsync(id, request.IsActive));
+    }
+
+    [HttpPut("{id:int}/employee")]
+    public async Task<ActionResult<AdminUserListItem>> UpdateEmployeeInfo(int id, [FromBody] UpdateEmployeeInfoRequest request)
+    {
+        return Ok(await _adminUsers.UpdateEmployeeInfoAsync(id, request));
     }
 }
 

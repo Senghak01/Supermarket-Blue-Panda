@@ -20,4 +20,5 @@ public class Customer
     public Cart? Cart { get; set; }
     public ICollection<CustomerRole> CustomerRoles { get; set; } = new List<CustomerRole>();
     public ICollection<CustomerPermission> CustomerPermissions { get; set; } = new List<CustomerPermission>();
+    public Employee? Employee { get; set; }
 }

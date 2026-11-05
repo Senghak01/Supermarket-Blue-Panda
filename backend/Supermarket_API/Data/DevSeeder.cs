@@ -32,6 +32,15 @@ public static class DevSeeder
                 await db.SaveChangesAsync();
 
                 db.CustomerRoles.Add(new CustomerRole { CustomerId = admin.CustomerId, RoleId = adminRole.RoleId });
+                db.Employees.Add(new Employee
+                {
+                    CustomerId = admin.CustomerId,
+                    FirstName = "System",
+                    LastName = "Administrator",
+                    Position = "Administrator",
+                    Department = "Management",
+                    HireDate = DateTime.UtcNow
+                });
             }
 
             // Seed default Staff user: staff@supermarket.com / Staff@123
@@ -48,8 +57,48 @@ public static class DevSeeder
                 await db.SaveChangesAsync();
 
                 db.CustomerRoles.Add(new CustomerRole { CustomerId = staff.CustomerId, RoleId = staffRole.RoleId });
+                db.Employees.Add(new Employee
+                {
+                    CustomerId = staff.CustomerId,
+                    FirstName = "Store",
+                    LastName = "Staff",
+                    Position = "Store Associate",
+                    Department = "Operations",
+                    HireDate = DateTime.UtcNow
+                });
             }
 
+            await db.SaveChangesAsync();
+        }
+
+        // Check if existing Admin or Staff need Employee profile attached
+        var existingAdmin = await db.Customers.Include(c => c.Employee).FirstOrDefaultAsync(c => c.Email == "admin@supermarket.com");
+        if (existingAdmin != null && existingAdmin.Employee == null)
+        {
+            db.Employees.Add(new Employee
+            {
+                CustomerId = existingAdmin.CustomerId,
+                FirstName = "System",
+                LastName = "Administrator",
+                Position = "Administrator",
+                Department = "Management",
+                HireDate = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var existingStaff = await db.Customers.Include(c => c.Employee).FirstOrDefaultAsync(c => c.Email == "staff@supermarket.com");
+        if (existingStaff != null && existingStaff.Employee == null)
+        {
+            db.Employees.Add(new Employee
+            {
+                CustomerId = existingStaff.CustomerId,
+                FirstName = "Store",
+                LastName = "Staff",
+                Position = "Store Associate",
+                Department = "Operations",
+                HireDate = DateTime.UtcNow
+            });
             await db.SaveChangesAsync();
         }
 

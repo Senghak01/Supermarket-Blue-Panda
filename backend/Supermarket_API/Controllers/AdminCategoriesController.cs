@@ -7,7 +7,7 @@ using Supermarket.API.Services.Interfaces;
 namespace Supermarket.API.Controllers;
 
 [ApiController]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "ManageCategories")]
 [Route("api/admin/categories")]
 public class AdminCategoriesController : ControllerBase
 {

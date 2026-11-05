@@ -26,6 +26,7 @@ public class AdminUserService : IAdminUserService
             .Include(c => c.CustomerRoles)
                 .ThenInclude(cr => cr.Role)
             .Include(c => c.CustomerPermissions)
+            .Include(c => c.Employee)
             .AsNoTracking()
             .AsQueryable();
 
@@ -33,6 +34,11 @@ public class AdminUserService : IAdminUserService
         {
             var targetRole = role.Trim();
             q = q.Where(c => c.CustomerRoles.Any(cr => cr.Role.Name == targetRole));
+        }
+        else
+        {
+            // The web management portal manages store staff and administrators only, excluding pure customers
+            q = q.Where(c => c.CustomerRoles.Any(cr => cr.Role.Name != "Customer"));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -64,6 +70,7 @@ public class AdminUserService : IAdminUserService
             .Include(c => c.CustomerRoles)
                 .ThenInclude(cr => cr.Role)
             .Include(c => c.CustomerPermissions)
+            .Include(c => c.Employee)
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.CustomerId == customerId)
             ?? throw AppException.NotFound("User not found.");
@@ -102,6 +109,22 @@ public class AdminUserService : IAdminUserService
                 }
             }
         }
+
+        // Attach Employee HR info
+        var firstName = !string.IsNullOrWhiteSpace(request.FirstName) ? request.FirstName.Trim() : request.Username.Trim();
+        var lastName = !string.IsNullOrWhiteSpace(request.LastName) ? request.LastName.Trim() : (roleName == "Admin" ? "Admin" : "Staff");
+
+        customer.Employee = new Employee
+        {
+            FirstName = firstName,
+            LastName = lastName,
+            PhoneNumber = request.PhoneNumber?.Trim(),
+            Position = request.Position?.Trim() ?? roleName,
+            Department = request.Department?.Trim() ?? "Store Operations",
+            HireDate = request.HireDate ?? DateTime.UtcNow,
+            Salary = request.Salary,
+            EmergencyContact = request.EmergencyContact?.Trim()
+        };
 
         _db.Customers.Add(customer);
         await _db.SaveChangesAsync();
@@ -201,6 +224,92 @@ public class AdminUserService : IAdminUserService
         return MapToListItem(user);
     }
 
+    public async Task<AdminUserListItem> UpdateUserPermissionsAsync(int customerId, UpdateUserPermissionsRequest request)
+    {
+        var user = await _db.Customers
+            .Include(c => c.CustomerRoles)
+                .ThenInclude(cr => cr.Role)
+            .Include(c => c.CustomerPermissions)
+            .FirstOrDefaultAsync(c => c.CustomerId == customerId)
+            ?? throw AppException.NotFound("User not found.");
+
+        user.CustomerPermissions.Clear();
+        if (request.Permissions != null)
+        {
+            foreach (var perm in request.Permissions.Select(p => p.Trim()).Distinct())
+            {
+                if (!string.IsNullOrWhiteSpace(perm))
+                {
+                    user.CustomerPermissions.Add(new CustomerPermission { CustomerId = user.CustomerId, Permission = perm });
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return MapToListItem(user);
+    }
+
+    public async Task<List<RoleResponse>> GetRolesAsync()
+    {
+        return await _db.Roles
+            .AsNoTracking()
+            .Where(r => r.Name != "Customer")
+            .OrderBy(r => r.RoleId)
+            .Select(r => new RoleResponse { RoleId = r.RoleId, Name = r.Name })
+            .ToListAsync();
+    }
+
+    public async Task<RoleResponse> CreateRoleAsync(CreateRoleRequest request)
+    {
+        var name = request.Name.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            throw AppException.BadRequest("Role name cannot be empty.");
+
+        var existing = await _db.Roles.FirstOrDefaultAsync(r => r.Name.ToLower() == name.ToLower());
+        if (existing != null)
+            return new RoleResponse { RoleId = existing.RoleId, Name = existing.Name };
+
+        var role = new Role { Name = name };
+        _db.Roles.Add(role);
+        await _db.SaveChangesAsync();
+
+        return new RoleResponse { RoleId = role.RoleId, Name = role.Name };
+    }
+
+    public async Task<AdminUserListItem> UpdateEmployeeInfoAsync(int customerId, UpdateEmployeeInfoRequest request)
+    {
+        var user = await _db.Customers
+            .Include(c => c.CustomerRoles)
+                .ThenInclude(cr => cr.Role)
+            .Include(c => c.CustomerPermissions)
+            .Include(c => c.Employee)
+            .FirstOrDefaultAsync(c => c.CustomerId == customerId)
+            ?? throw AppException.NotFound("User not found.");
+
+        if (user.Employee == null)
+        {
+            user.Employee = new Employee
+            {
+                CustomerId = customerId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Employees.Add(user.Employee);
+        }
+
+        user.Employee.FirstName = request.FirstName.Trim();
+        user.Employee.LastName = request.LastName.Trim();
+        user.Employee.PhoneNumber = request.PhoneNumber?.Trim();
+        user.Employee.Position = request.Position?.Trim();
+        user.Employee.Department = request.Department?.Trim();
+        user.Employee.HireDate = request.HireDate;
+        user.Employee.Salary = request.Salary;
+        user.Employee.EmergencyContact = request.EmergencyContact?.Trim();
+        user.Employee.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return MapToListItem(user);
+    }
+
     private static AdminUserListItem MapToListItem(Customer c) => new()
     {
         CustomerId = c.CustomerId,
@@ -209,6 +318,18 @@ public class AdminUserService : IAdminUserService
         IsActive = c.IsActive,
         CreatedAt = c.CreatedAt,
         Roles = c.CustomerRoles.Select(cr => cr.Role?.Name ?? string.Empty).Where(n => !string.IsNullOrEmpty(n)).ToList(),
-        Permissions = c.CustomerPermissions.Select(cp => cp.Permission).ToList()
+        Permissions = c.CustomerPermissions.Select(cp => cp.Permission).ToList(),
+        Employee = c.Employee == null ? null : new EmployeeInfoDTO
+        {
+            EmployeeId = c.Employee.EmployeeId,
+            FirstName = c.Employee.FirstName,
+            LastName = c.Employee.LastName,
+            PhoneNumber = c.Employee.PhoneNumber,
+            Position = c.Employee.Position,
+            Department = c.Employee.Department,
+            HireDate = c.Employee.HireDate,
+            Salary = c.Employee.Salary,
+            EmergencyContact = c.Employee.EmergencyContact
+        }
     };
 }
